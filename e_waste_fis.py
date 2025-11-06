@@ -151,3 +151,66 @@ def sugeno_infer(metal: float, contam: float, repair: float, hazard: float, retu
     score = float(np.sum(w * z) / np.sum(w))
     label = min(OUTPUT_CONSTANTS.keys(), key=lambda k: abs(score - OUTPUT_CONSTANTS[k]))
     return (score, label, trace) if return_trace else (score, label)
+
+# 5) Plotting utilities
+def plot_variable(var: FuzzyVariable, path: str):
+    xs = np.linspace(var.u_min, var.u_max, 1000)
+    plt.figure(figsize=(6, 4))
+    for lbl, (typ, params) in var.sets.items():
+        y = tri(xs, *params) if typ == "tri" else trap(xs, *params)
+        plt.plot(xs, y, label=lbl)
+    plt.xlabel(var.name); plt.ylabel("Membership")
+    plt.title(f"Membership Functions: {var.name}")
+    plt.legend(loc="best"); plt.grid(True, alpha=0.3)
+    plt.tight_layout(); plt.savefig(path, bbox_inches="tight"); plt.close()
+
+def plot_slice_contamination(metal: float, repair: float, hazard: float, path: str):
+    xs = np.linspace(Contamination.u_min, Contamination.u_max, 160)
+    ys = [sugeno_infer(metal, c, repair, hazard)[0] for c in xs]
+    plt.figure(figsize=(6, 4)); plt.plot(xs, ys)
+    plt.xlabel("Contamination (0–100)"); plt.ylabel("Decision Score (0–100)")
+    plt.title(f"Decision vs Contamination\n(metal={metal}, repair={repair}, hazard={hazard})")
+    plt.grid(True, alpha=0.3); plt.tight_layout(); plt.savefig(path, bbox_inches="tight"); plt.close()
+
+def plot_surface_2d(xvar: FuzzyVariable, yvar: FuzzyVariable, fixed: Dict[str, float],
+                    path: str, steps: int = 90):
+    x = np.linspace(xvar.u_min, xvar.u_max, steps)
+    y = np.linspace(yvar.u_min, yvar.u_max, steps)
+    Z = np.zeros((steps, steps), dtype=float)
+    for i, xv in enumerate(x):
+        for j, yv in enumerate(y):
+            vals = {
+                MetalContent.name:  fixed.get(MetalContent.name, 50),
+                Contamination.name: fixed.get(Contamination.name, 50),
+                Repairability.name: fixed.get(Repairability.name, 5),
+                Hazard.name:        fixed.get(Hazard.name, 5),
+            }
+            if xvar is MetalContent:   vals[MetalContent.name]  = xv
+            if xvar is Contamination:  vals[Contamination.name] = xv
+            if xvar is Repairability:  vals[Repairability.name] = xv
+            if xvar is Hazard:         vals[Hazard.name]        = xv
+            if yvar is MetalContent:   vals[MetalContent.name]  = yv
+            if yvar is Contamination:  vals[Contamination.name] = yv
+            if yvar is Repairability:  vals[Repairability.name] = yv
+            if yvar is Hazard:         vals[Hazard.name]        = yv
+            Z[j, i] = sugeno_infer(vals[MetalContent.name], vals[Contamination.name],
+                                   vals[Repairability.name], vals[Hazard.name])[0]
+    plt.figure(figsize=(6.4, 4.8))
+    im = plt.imshow(Z, origin="lower", aspect="auto",
+                    extent=[x.min(), x.max(), y.min(), y.max()])
+    plt.colorbar(im, label="Decision Score (0–100)")
+    plt.xlabel(xvar.name); plt.ylabel(yvar.name); plt.title("Decision Surface (2D slice)")
+    plt.tight_layout(); plt.savefig(path, bbox_inches="tight"); plt.close()
+
+def save_all_figures(output_dir: str = "."):
+    plot_variable(MetalContent,  f"{output_dir}/mf_metal.png")
+    plot_variable(Contamination, f"{output_dir}/mf_contamination.png")
+    plot_variable(Repairability, f"{output_dir}/mf_repairability.png")
+    plot_variable(Hazard,        f"{output_dir}/mf_hazard.png")
+    plot_slice_contamination(80, 4, 2, f"{output_dir}/slice_contamination.png")
+    plot_surface_2d(MetalContent, Contamination,
+                    {MetalContent.name: 50, Contamination.name: 50, Repairability.name: 5, Hazard.name: 5},
+                    f"{output_dir}/surface_metal_vs_contamination.png")
+    plot_surface_2d(Repairability, Hazard,
+                    {MetalContent.name: 60, Contamination.name: 40, Repairability.name: 5, Hazard.name: 5},
+                    f"{output_dir}/surface_repairability_vs_hazard.png")
