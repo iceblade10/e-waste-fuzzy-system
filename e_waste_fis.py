@@ -118,3 +118,36 @@ RULES: List[Rule] = [
     Rule([(Contamination, "High"), (MetalContent, "Medium"), (Hazard, "Safe")], "Material Recovery"),
     Rule([(Contamination, "Moderate"), (Repairability, "Good"), (Hazard, "Risky")], "Hazardous Handling"),
 ]
+
+# 4) Sugeno inference
+def sugeno_infer(metal: float, contam: float, repair: float, hazard: float, return_trace: bool=False):
+    """Return (score, nearest_label) or (score, label, trace) if return_trace=True."""
+    # Clamp to universes
+    metal  = float(np.clip(metal,  MetalContent.u_min,  MetalContent.u_max))
+    contam = float(np.clip(contam, Contamination.u_min, Contamination.u_max))
+    repair = float(np.clip(repair, Repairability.u_min, Repairability.u_max))
+    hazard = float(np.clip(hazard, Hazard.u_min, Hazard.u_max))
+
+    inputs = {
+        MetalContent.name:  metal,
+        Contamination.name: contam,
+        Repairability.name: repair,
+        Hazard.name:        hazard,
+    }
+
+    weights, outputs, trace = [], [], []
+    for rule in RULES:
+        w = rule.fire(inputs)
+        if w > 0.0:
+            z = OUTPUT_CONSTANTS[rule.consequent]
+            weights.append(w); outputs.append(z)
+            trace.append((rule.consequent, w, z))
+
+    if not weights:
+        return (np.nan, "No decision", trace) if return_trace else (np.nan, "No decision")
+
+    w = np.asarray(weights, dtype=float)
+    z = np.asarray(outputs, dtype=float)
+    score = float(np.sum(w * z) / np.sum(w))
+    label = min(OUTPUT_CONSTANTS.keys(), key=lambda k: abs(score - OUTPUT_CONSTANTS[k]))
+    return (score, label, trace) if return_trace else (score, label)
