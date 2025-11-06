@@ -214,3 +214,35 @@ def save_all_figures(output_dir: str = "."):
     plot_surface_2d(Repairability, Hazard,
                     {MetalContent.name: 60, Contamination.name: 40, Repairability.name: 5, Hazard.name: 5},
                     f"{output_dir}/surface_repairability_vs_hazard.png")
+
+# 6) Optional CLI (does nothing unless you pass flags)
+if __name__ == "__main__":
+    import argparse
+    p = argparse.ArgumentParser(description="E-waste Sugeno FIS")
+    p.add_argument("--demo", action="store_true", help="Print demo cases with rule traces")
+    p.add_argument("--figures", action="store_true", help="Save MF plots and decision surfaces")
+    p.add_argument("--out", default=".", help="Output folder for figures")
+    args = p.parse_args()
+
+    if args.demo:
+        def _print_trace(ex):
+            score, label, trace = sugeno_infer(**ex, return_trace=True)
+            print(f"Inputs: {ex} -> score={score:.2f}, label={label}")
+            # show top contributing rules
+            if trace:
+                top = sorted(trace, key=lambda t: t[1]*t[2], reverse=True)[:5]
+                for i, (cons, w, z) in enumerate(top, 1):
+                    print(f"  #{i}: fired={w:.3f}, consequent={cons} (z={z:.0f})")
+
+        print("=== Demo cases ===")
+        cases = [
+            {"metal": 85, "contam": 10, "repair": 3, "hazard": 1},
+            {"metal": 30, "contam": 80, "repair": 2, "hazard": 8.5},
+            {"metal": 55, "contam": 45, "repair": 7, "hazard": 2.5},
+        ]
+        for ex in cases:
+            _print_trace(ex)
+
+    if args.figures:
+        save_all_figures(args.out)
+        print(f"Plots saved to: {args.out}")
